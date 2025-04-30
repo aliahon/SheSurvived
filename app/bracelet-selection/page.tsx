@@ -4,7 +4,8 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Shield, Watch, Users } from "lucide-react"
+import { Watch, Users } from "lucide-react"
+import SheSurvivedLogo from "@/components/she-survived-logo"
 
 export default function BraceletSelectionPage() {
   const router = useRouter()
@@ -24,7 +25,13 @@ export default function BraceletSelectionPage() {
     if (!user) return
 
     // Update user in local storage
-    const updatedUser = { ...user, hasBracelet }
+    const updatedUser = {
+      ...user,
+      hasBracelet,
+      // If user doesn't have a bracelet, mark as verified (no need for verification)
+      // If user has a bracelet, they need to verify it (braceletVerified = false)
+      braceletVerified: !hasBracelet,
+    }
     localStorage.setItem("safetyUser", JSON.stringify(updatedUser))
 
     // Update user in users array
@@ -32,8 +39,12 @@ export default function BraceletSelectionPage() {
     const updatedUsers = users.map((u: any) => (u.id === user.id ? updatedUser : u))
     localStorage.setItem("safetyUsers", JSON.stringify(updatedUsers))
 
-    // Redirect to dashboard
-    router.push("/dashboard")
+    // Redirect to verification page if user has bracelet, otherwise to dashboard
+    if (hasBracelet) {
+      router.push("/bracelet-verification")
+    } else {
+      router.push("/dashboard")
+    }
   }
 
   if (!user) return null
@@ -41,16 +52,14 @@ export default function BraceletSelectionPage() {
   return (
     <div className="container max-w-md mx-auto px-4 py-8 flex flex-col items-center justify-center min-h-screen">
       <div className="flex flex-col items-center mb-8">
-        <Shield className="h-12 w-12 text-pink-500" />
-        <h1 className="text-3xl font-bold text-pink-700 mt-2">SafeGuard</h1>
-        <p className="text-sm text-gray-500">Your personal safety companion</p>
+        <SheSurvivedLogo size="lg" />
       </div>
 
       <Card className="w-full">
         <CardHeader>
           <CardTitle className="text-center text-pink-700">Choose Your Role</CardTitle>
           <CardDescription className="text-center">
-            Do you have a SafeGuard bracelet or are you a trusted contact?
+            Do you have a SheSurvived bracelet or are you a trusted contact?
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -59,7 +68,7 @@ export default function BraceletSelectionPage() {
             className="w-full h-24 flex flex-col items-center justify-center bg-pink-500 hover:bg-pink-600"
           >
             <Watch className="h-8 w-8 mb-2" />
-            <span>I have a SafeGuard bracelet</span>
+            <span>I have a SheSurvived bracelet</span>
           </Button>
 
           <Button

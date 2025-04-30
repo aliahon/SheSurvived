@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Switch } from "@/components/ui/switch"
-import { ArrowLeft, Save, LogOut } from "lucide-react"
+import { ArrowLeft, Save, LogOut, AlertCircle } from "lucide-react"
 
 export default function ProfilePage() {
   const router = useRouter()
@@ -56,8 +56,21 @@ export default function ProfilePage() {
 
     if (!user) return
 
+    // If user is toggling bracelet status
+    const braceletStatusChanged = user.hasBracelet !== formData.hasBracelet
+
     // Update user in local storage
-    const updatedUser = { ...user, ...formData }
+    const updatedUser = {
+      ...user,
+      ...formData,
+      // If user is turning off bracelet, remove verification
+      // If user is turning on bracelet, they need to verify it
+      ...(braceletStatusChanged && {
+        braceletVerified: !formData.hasBracelet,
+        ...(formData.hasBracelet ? { braceletCode: null } : {}),
+      }),
+    }
+
     localStorage.setItem("safetyUser", JSON.stringify(updatedUser))
 
     // Update user in users array
@@ -72,6 +85,11 @@ export default function ProfilePage() {
     setTimeout(() => {
       setMessage("")
     }, 3000)
+
+    // If user enabled bracelet, redirect to verification
+    if (braceletStatusChanged && formData.hasBracelet) {
+      router.push("/bracelet-verification")
+    }
   }
 
   const handleLogout = () => {
@@ -128,14 +146,46 @@ export default function ProfilePage() {
             <CardHeader>
               <CardTitle className="text-pink-700">Device Settings</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
-                  <Label htmlFor="bracelet-status">SafeGuard Bracelet</Label>
-                  <p className="text-sm text-gray-500">Do you have a SafeGuard bracelet?</p>
+                  <Label htmlFor="bracelet-status">SheSurvived Bracelet</Label>
+                  <p className="text-sm text-gray-500">Do you have a SheSurvived bracelet?</p>
                 </div>
                 <Switch id="bracelet-status" checked={formData.hasBracelet} onCheckedChange={handleToggle} />
               </div>
+
+              {user.hasBracelet && user.braceletVerified && user.braceletCode && (
+                <div className="mt-4 p-3 bg-pink-50 rounded-md">
+                  <h3 className="text-sm font-medium text-pink-700">Your Bracelet</h3>
+                  <div className="mt-2 flex justify-between items-center">
+                    <div>
+                      <p className="text-xs text-gray-500">Bracelet Code</p>
+                      <p className="text-sm font-mono tracking-wider">{user.braceletCode}</p>
+                    </div>
+                    <div className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full">Verified</div>
+                  </div>
+                </div>
+              )}
+
+              {user.hasBracelet && !user.braceletVerified && (
+                <div className="mt-4 p-3 bg-yellow-50 rounded-md flex items-start">
+                  <AlertCircle className="h-5 w-5 text-yellow-500 mr-2 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="text-sm text-yellow-700 font-medium">Bracelet Not Verified</p>
+                    <p className="text-xs text-yellow-600 mt-1">
+                      Your bracelet needs to be verified before you can use emergency features.
+                    </p>
+                    <Button
+                      size="sm"
+                      className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-xs h-8"
+                      onClick={() => router.push("/bracelet-verification")}
+                    >
+                      Verify Now
+                    </Button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

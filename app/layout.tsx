@@ -7,7 +7,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "SafeGuard - Women's Safety App",
+  title: "SheSurvived - Women's Safety App",
   description: "A safety application for women with smart bracelet integration",
     generator: 'v0.dev'
 }

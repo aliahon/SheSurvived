@@ -4,8 +4,10 @@ import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowLeft, Phone, MessageSquare, AlertTriangle } from "lucide-react"
+import { ArrowLeft, Phone, MessageSquare, AlertTriangle, History } from "lucide-react"
 import LiveLocationMap from "@/components/live-location-map"
+import Link from "next/link"
+import { Skeleton } from "@/components/ui/skeleton"
 
 export default function EmergencyTrackPage() {
   const router = useRouter()
@@ -15,7 +17,8 @@ export default function EmergencyTrackPage() {
   const [user, setUser] = useState<any>(null)
   const [emergency, setEmergency] = useState<any>(null)
   const [victimUser, setVictimUser] = useState<any>(null)
-  const [location, setLocation] = useState<[number, number]>([40.7128, -74.006])
+  const [location, setLocation] = useState<[number, number]>([30.4278, -9.5981])
+  const [mapReady, setMapReady] = useState(false)
 
   useEffect(() => {
     // Get current user
@@ -27,23 +30,45 @@ export default function EmergencyTrackPage() {
     setUser(JSON.parse(currentUser))
 
     // Get emergency data
-    const allEmergencies = JSON.parse(localStorage.getItem("emergencies") || "{}")
-    const emergencyData = allEmergencies[userId]
+    const loadEmergencyData = () => {
+      const allEmergencies = JSON.parse(localStorage.getItem("emergencies") || "{}")
+      const emergencyData = allEmergencies[userId]
 
-    if (emergencyData) {
-      setEmergency(emergencyData)
-      setLocation(emergencyData.location)
+      if (emergencyData) {
+        setEmergency(emergencyData)
+        setLocation(emergencyData.location)
 
-      // Get victim user data
-      const allUsers = JSON.parse(localStorage.getItem("safetyUsers") || "[]")
-      const victim = allUsers.find((u: any) => u.id === userId)
-      if (victim) {
-        setVictimUser(victim)
+        // Get victim user data
+        const allUsers = JSON.parse(localStorage.getItem("safetyUsers") || "[]")
+        const victim = allUsers.find((u: any) => u.id === userId)
+        if (victim) {
+          setVictimUser(victim)
+        }
+      } else {
+        // Check emergency history
+        const emergencyHistory = JSON.parse(localStorage.getItem("emergencyHistory") || "{}")
+        if (emergencyHistory[userId]) {
+          const historyData = Array.isArray(emergencyHistory[userId])
+            ? emergencyHistory[userId][emergencyHistory[userId].length - 1]
+            : emergencyHistory[userId]
+
+          setEmergency(historyData)
+          setLocation(historyData.location)
+
+          // Get victim user data
+          const allUsers = JSON.parse(localStorage.getItem("safetyUsers") || "[]")
+          const victim = allUsers.find((u: any) => u.id === userId)
+          if (victim) {
+            setVictimUser(victim)
+          }
+        } else {
+          // No emergency data found, redirect back
+          router.push("/dashboard")
+        }
       }
-    } else {
-      // No emergency data found, redirect back
-      router.push("/dashboard")
     }
+
+    loadEmergencyData()
 
     // Check for location updates
     const checkLocationUpdates = () => {
@@ -55,9 +80,28 @@ export default function EmergencyTrackPage() {
 
     // Check immediately and then every 2 seconds
     checkLocationUpdates()
-    const interval = setInterval(checkLocationUpdates, 2000)
+    const locationInterval = setInterval(checkLocationUpdates, 2000)
 
-    return () => clearInterval(interval)
+    // Set up event listener for storage changes (cross-tab communication)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "emergencies" || e.key === "emergencyHistory" || e.key === "emergencyData") {
+        loadEmergencyData()
+        checkLocationUpdates()
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+
+    // Set map ready after a delay to ensure DOM is ready
+    const mapReadyTimeout = setTimeout(() => {
+      setMapReady(true)
+    }, 1000)
+
+    return () => {
+      clearInterval(locationInterval)
+      clearTimeout(mapReadyTimeout)
+      window.removeEventListener("storage", handleStorageChange)
+    }
   }, [router, userId])
 
   if (!user || !emergency || !victimUser) return null
@@ -74,41 +118,62 @@ export default function EmergencyTrackPage() {
             <p className="text-sm text-gray-500">{victimUser.fullName}</p>
           </div>
         </div>
-        <div className="bg-red-100 text-red-500 px-2 py-1 rounded-full text-xs font-medium animate-pulse">LIVE</div>
+        <div
+          className={`px-2 py-1 rounded-full text-xs font-medium ${emergency.active ? "bg-red-100 text-red-500 animate-pulse" : "bg-gray-100 text-gray-500"}`}
+        >
+          {emergency.active ? "LIVE" : "INACTIVE"}
+        </div>
       </header>
 
       <div className="flex-1 space-y-4">
-        <Card className="bg-red-50 border-red-200">
+        <Card className={emergency.active ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}>
           <CardContent className="p-4">
             <div className="flex items-start space-x-3">
-              <div className="bg-red-500 rounded-full p-2 mt-1">
+              <div className={`rounded-full p-2 mt-1 ${emergency.active ? "bg-red-500" : "bg-gray-500"}`}>
                 <AlertTriangle className="h-4 w-4 text-white" />
               </div>
               <div>
-                <h3 className="font-bold text-red-700">EMERGENCY ALERT</h3>
-                <p className="text-sm text-gray-700">{victimUser.fullName} needs help!</p>
+                <h3 className={`font-bold ${emergency.active ? "text-red-700" : "text-gray-700"}`}>
+                  {emergency.active ? "EMERGENCY ALERT" : "PAST EMERGENCY"}
+                </h3>
+                <p className="text-sm text-gray-700">
+                  {victimUser.fullName} {emergency.active ? "needs help!" : "needed help"}
+                </p>
                 <p className="text-xs text-gray-500">{new Date(emergency.timestamp).toLocaleString()}</p>
+                {emergency.cancelledAt && (
+                  <p className="text-xs text-yellow-600 mt-1">
+                    Cancelled at {new Date(emergency.cancelledAt).toLocaleString()}
+                  </p>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
 
         <div className="space-y-2">
-          <h3 className="text-md font-medium">Live Location</h3>
-          <LiveLocationMap initialLocation={location} userId={userId} height="300px" showControls={false} />
-          <p className="text-xs text-gray-500 text-center">Location is being updated in real-time</p>
+          <h3 className="text-md font-medium">{emergency.active ? "Live Location" : "Last Known Location"}</h3>
+          {!mapReady ? (
+            <Skeleton className="w-full h-[300px] rounded-md" />
+          ) : (
+            <LiveLocationMap initialLocation={location} userId={userId} height="300px" showControls={false} />
+          )}
+          <p className="text-xs text-gray-500 text-center">
+            {emergency.active ? "Location is being updated in real-time" : "This was the last recorded location"}
+          </p>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <Button className="bg-green-500 hover:bg-green-600 h-14">
-            <Phone className="h-5 w-5 mr-2" />
-            Call
-          </Button>
-          <Button className="bg-blue-500 hover:bg-blue-600 h-14">
-            <MessageSquare className="h-5 w-5 mr-2" />
-            Message
-          </Button>
-        </div>
+        {emergency.active && (
+          <div className="grid grid-cols-2 gap-4">
+            <Button className="bg-green-500 hover:bg-green-600 h-14">
+              <Phone className="h-5 w-5 mr-2" />
+              Call
+            </Button>
+            <Button className="bg-blue-500 hover:bg-blue-600 h-14">
+              <MessageSquare className="h-5 w-5 mr-2" />
+              Message
+            </Button>
+          </div>
+        )}
 
         <Card>
           <CardContent className="p-4">
@@ -126,6 +191,13 @@ export default function EmergencyTrackPage() {
             </div>
           </CardContent>
         </Card>
+
+        <Link href="/emergency-history">
+          <Button variant="outline" className="w-full border-pink-200 text-pink-700">
+            <History className="h-4 w-4 mr-2" />
+            View All Emergency History
+          </Button>
+        </Link>
       </div>
     </div>
   )

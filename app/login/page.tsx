@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Shield } from "lucide-react"
+import SheSurvivedLogo from "@/components/she-survived-logo"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -50,9 +50,7 @@ export default function LoginPage() {
   return (
     <div className="container max-w-md mx-auto px-4 py-8 flex flex-col items-center justify-center min-h-screen">
       <div className="flex flex-col items-center mb-8">
-        <Shield className="h-12 w-12 text-pink-500" />
-        <h1 className="text-3xl font-bold text-pink-700 mt-2">SafeGuard</h1>
-        <p className="text-sm text-gray-500">Your personal safety companion</p>
+        <SheSurvivedLogo size="lg" />
       </div>
 
       <Card className="w-full">

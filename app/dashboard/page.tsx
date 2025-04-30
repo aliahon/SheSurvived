@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Shield, Bell, Users, Map, User, LogOut, AlertTriangle } from "lucide-react"
+import { Shield, Bell, Users, Map, User, LogOut, AlertTriangle, AlertCircle, History } from "lucide-react"
 import Link from "next/link"
 import EmergencyNotification from "@/components/emergency-notification"
+import SheSurvivedLogo from "@/components/she-survived-logo"
 
 export default function DashboardPage() {
   const router = useRouter()
@@ -39,6 +40,7 @@ export default function DashboardPage() {
           if (contactUser) {
             activeEmergencies.push({
               ...allEmergencies[contactId],
+              userId: contactId,
               userName: contactUser.fullName,
             })
           }
@@ -52,7 +54,19 @@ export default function DashboardPage() {
     checkEmergencies()
     const interval = setInterval(checkEmergencies, 5000)
 
-    return () => clearInterval(interval)
+    // Set up event listener for storage changes (cross-tab communication)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "emergencies" || e.key === "safetyUser" || e.key === "safetyUsers") {
+        checkEmergencies()
+      }
+    }
+
+    window.addEventListener("storage", handleStorageChange)
+
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener("storage", handleStorageChange)
+    }
   }, [router])
 
   const handleLogout = () => {
@@ -70,8 +84,7 @@ export default function DashboardPage() {
     <div className="container max-w-md mx-auto px-4 py-4 min-h-screen flex flex-col">
       <header className="flex items-center justify-between py-4">
         <div className="flex items-center">
-          <Shield className="h-6 w-6 text-pink-500 mr-2" />
-          <h1 className="text-xl font-bold text-pink-700">SafeGuard</h1>
+          <SheSurvivedLogo size="sm" withText={true} />
         </div>
         <div className="flex items-center">
           <Button variant="ghost" size="icon" onClick={handleLogout} className="text-gray-500">
@@ -110,7 +123,30 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {user.hasBracelet && (
+            {user.hasBracelet && !user.braceletVerified && (
+              <Card className="bg-yellow-50 border-yellow-200">
+                <CardContent className="p-4">
+                  <div className="flex items-start space-x-3">
+                    <AlertCircle className="h-5 w-5 text-yellow-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <h3 className="font-medium text-yellow-700">Bracelet Not Verified</h3>
+                      <p className="text-sm text-yellow-600 mt-1">
+                        Your bracelet needs to be verified before you can use emergency features.
+                      </p>
+                      <Button
+                        size="sm"
+                        className="mt-2 bg-yellow-500 hover:bg-yellow-600 text-xs h-8"
+                        onClick={() => router.push("/bracelet-verification")}
+                      >
+                        Verify Now
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {user.hasBracelet && user.braceletVerified && (
               <Link href="/alarm">
                 <Button className="w-full h-20 bg-pink-500 hover:bg-pink-600 flex items-center justify-center space-x-3">
                   <AlertTriangle className="h-6 w-6" />
@@ -139,10 +175,19 @@ export default function DashboardPage() {
               </Link>
 
               <Link href="/safe-walk">
-                <Card className="hover:bg-pink-50 transition-colors cursor-pointer col-span-2">
+                <Card className="hover:bg-pink-50 transition-colors cursor-pointer">
                   <CardContent className="p-4 flex flex-col items-center justify-center h-32">
                     <Map className="h-8 w-8 text-pink-500 mb-2" />
-                    <h3 className="font-medium text-center">Safe Walk Routes</h3>
+                    <h3 className="font-medium text-center">Safety Map</h3>
+                  </CardContent>
+                </Card>
+              </Link>
+
+              <Link href="/emergency-history">
+                <Card className="hover:bg-pink-50 transition-colors cursor-pointer">
+                  <CardContent className="p-4 flex flex-col items-center justify-center h-32">
+                    <History className="h-8 w-8 text-pink-500 mb-2" />
+                    <h3 className="font-medium text-center">Alert History</h3>
                   </CardContent>
                 </Card>
               </Link>
@@ -167,7 +212,7 @@ export default function DashboardPage() {
             <TabsTrigger value="routes" asChild>
               <Link href="/safe-walk" className="flex flex-col items-center justify-center text-gray-500 py-2">
                 <Map className="h-5 w-5" />
-                <span className="text-xs mt-1">Routes</span>
+                <span className="text-xs mt-1">Map</span>
               </Link>
             </TabsTrigger>
             <TabsTrigger value="profile" asChild>
