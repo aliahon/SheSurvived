@@ -4,20 +4,29 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { AlertTriangle, X, Mic, ArrowLeft, Bell, Users } from "lucide-react"
+import { AlertTriangle, X, Mic, ArrowLeft, Bell, Users, AlertCircle, CheckCircle } from "lucide-react"
 import LiveLocationMap from "@/components/live-location-map"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Label } from "@/components/ui/label"
 
 export default function AlarmPage() {
   const router = useRouter()
   const [user, setUser] = useState<any>(null)
   const [alarmActive, setAlarmActive] = useState(false)
+  const [doubtMode, setDoubtMode] = useState(false)
   const [recording, setRecording] = useState(false)
   const [location, setLocation] = useState<[number, number]>([30.4278, -9.5981]) // Default to Agadir
   const [elapsedTime, setElapsedTime] = useState(0)
   const [trustedContacts, setTrustedContacts] = useState<any[]>([])
   const [mapReady, setMapReady] = useState(false)
   const timerRef = useRef<NodeJS.Timeout | null>(null)
+  const [audioChunks, setAudioChunks] = useState<string[]>([])
+  const [showCancelDialog, setShowCancelDialog] = useState(false)
+  const [liveStreamActive, setLiveStreamActive] = useState(false)
+  const [showEmergencyTypeDialog, setShowEmergencyTypeDialog] = useState(false)
+  const [emergencyType, setEmergencyType] = useState<string>("")
 
   useEffect(() => {
     // Get current user
@@ -42,7 +51,7 @@ export default function AlarmPage() {
 
     setUser(userData)
 
-    // Get trusted contacts
+    // Get trusted contacts - all users that the current user trusts
     const allUsers = JSON.parse(localStorage.getItem("safetyUsers") || "[]")
     const userTrustedContacts = userData.trustedContacts || []
     const contacts = allUsers.filter((u: any) => userTrustedContacts.includes(u.id))
@@ -57,7 +66,14 @@ export default function AlarmPage() {
     const emergencies = JSON.parse(localStorage.getItem("emergencies") || "{}")
     if (emergencies[userData.id] && emergencies[userData.id].active) {
       setAlarmActive(true)
+      setDoubtMode(emergencies[userData.id].doubtMode || false)
       setRecording(true)
+      setLiveStreamActive(true)
+
+      // Load any existing audio chunks
+      if (emergencies[userData.id].audioChunks) {
+        setAudioChunks(emergencies[userData.id].audioChunks)
+      }
 
       // Calculate elapsed time
       const startTime = new Date(emergencies[userData.id].timestamp).getTime()
@@ -78,7 +94,14 @@ export default function AlarmPage() {
         if (updatedEmergencies[userData.id]) {
           if (updatedEmergencies[userData.id].active && !alarmActive) {
             setAlarmActive(true)
+            setDoubtMode(updatedEmergencies[userData.id].doubtMode || false)
             setRecording(true)
+            setLiveStreamActive(true)
+
+            // Load any existing audio chunks
+            if (updatedEmergencies[userData.id].audioChunks) {
+              setAudioChunks(updatedEmergencies[userData.id].audioChunks)
+            }
 
             // Calculate elapsed time
             const startTime = new Date(updatedEmergencies[userData.id].timestamp).getTime()
@@ -93,8 +116,11 @@ export default function AlarmPage() {
             }, 1000)
           } else if (!updatedEmergencies[userData.id].active && alarmActive) {
             setAlarmActive(false)
+            setDoubtMode(false)
             setRecording(false)
+            setLiveStreamActive(false)
             setElapsedTime(0)
+            setAudioChunks([])
             if (timerRef.current) clearInterval(timerRef.current)
           }
         }
@@ -117,9 +143,68 @@ export default function AlarmPage() {
     }
   }, [router, alarmActive])
 
-  const triggerAlarm = () => {
+  // Simulate recording and streaming audio chunks
+  useEffect(() => {
+    if (recording && liveStreamActive) {
+      const recordingInterval = setInterval(() => {
+        // Generate a mock audio chunk (in a real app, this would be actual audio data)
+        const mockAudioChunk = `audio_chunk_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`
+
+        setAudioChunks((prev) => {
+          const newChunks = [...prev, mockAudioChunk]
+
+          // Update the emergency data with the new audio chunks
+          if (user) {
+            const emergencies = JSON.parse(localStorage.getItem("emergencies") || "{}")
+            if (emergencies[user.id]) {
+              // Update the audio chunks
+              emergencies[user.id].audioChunks = newChunks
+
+              // Add a timestamp to the latest chunk for live streaming
+              emergencies[user.id].latestAudioChunk = {
+                chunk: mockAudioChunk,
+                timestamp: new Date().toISOString(),
+              }
+
+              localStorage.setItem("emergencies", JSON.stringify(emergencies))
+
+              // Also update in emergency history
+              const emergencyHistory = JSON.parse(localStorage.getItem("emergencyHistory") || "{}")
+              if (Array.isArray(emergencyHistory[user.id]) && emergencyHistory[user.id].length > 0) {
+                const lastIndex = emergencyHistory[user.id].length - 1
+                if (lastIndex >= 0) {
+                  emergencyHistory[user.id][lastIndex].audioChunks = newChunks
+                  emergencyHistory[user.id][lastIndex].latestAudioChunk = {
+                    chunk: mockAudioChunk,
+                    timestamp: new Date().toISOString(),
+                  }
+                }
+              }
+              localStorage.setItem("emergencyHistory", JSON.stringify(emergencyHistory))
+
+              // Dispatch storage event for cross-tab communication to notify listeners
+              window.dispatchEvent(
+                new StorageEvent("storage", {
+                  key: "emergencies",
+                  newValue: JSON.stringify(emergencies),
+                }),
+              )
+            }
+          }
+
+          return newChunks
+        })
+      }, 5000) // Add a new chunk every 5 seconds
+
+      return () => clearInterval(recordingInterval)
+    }
+  }, [recording, liveStreamActive, user])
+
+  const triggerAlarm = (isDoubtMode = false) => {
     setAlarmActive(true)
+    setDoubtMode(isDoubtMode)
     setRecording(true)
+    setLiveStreamActive(true)
 
     // Start timer
     timerRef.current = setInterval(() => {
@@ -135,9 +220,12 @@ export default function AlarmPage() {
         timestamp: new Date().toISOString(),
         location: location,
         active: true,
+        doubtMode: isDoubtMode,
         braceletCode: user.braceletCode,
         // Flag to indicate that an alarm should play on trusted contacts' devices
-        playAlarmOnContact: true,
+        playAlarmOnContact: !isDoubtMode, // Don't play alarm for doubt mode
+        audioChunks: [], // Initialize empty audio chunks array
+        liveStreamActive: true, // Indicate that live streaming is active
       }
 
       // Store emergency data in localStorage
@@ -151,10 +239,11 @@ export default function AlarmPage() {
         emergencyHistory[user.id] = []
       }
 
-      // If it's an array, push to it, otherwise create a new array
+      // Always store as an array
       if (Array.isArray(emergencyHistory[user.id])) {
         emergencyHistory[user.id].push(emergencyData)
       } else {
+        // Convert to array if it wasn't already
         emergencyHistory[user.id] = [emergencyHistory[user.id], emergencyData]
       }
 
@@ -175,10 +264,31 @@ export default function AlarmPage() {
     }
   }
 
-  const cancelAlarm = () => {
+  const handleCancelClick = () => {
+    setShowCancelDialog(true)
+  }
+
+  const handleFalseAlarm = () => {
+    cancelAlarm(false)
+  }
+
+  const handleRealEmergency = () => {
+    setShowCancelDialog(false)
+    setShowEmergencyTypeDialog(true)
+  }
+
+  const handleEmergencyTypeSelect = () => {
+    cancelAlarm(true)
+    setShowEmergencyTypeDialog(false)
+  }
+
+  const cancelAlarm = (wasRealEmergency: boolean) => {
     setAlarmActive(false)
+    setDoubtMode(false)
     setRecording(false)
+    setLiveStreamActive(false)
     setElapsedTime(0)
+    setShowCancelDialog(false)
 
     if (timerRef.current) {
       clearInterval(timerRef.current)
@@ -191,11 +301,20 @@ export default function AlarmPage() {
         emergencies[user.id].active = false
         emergencies[user.id].cancelledAt = new Date().toISOString()
         emergencies[user.id].playAlarmOnContact = false
+        emergencies[user.id].liveStreamActive = false
+        emergencies[user.id].wasRealEmergency = wasRealEmergency
+        emergencies[user.id].cancellationReason = wasRealEmergency ? "Emergency resolved" : "False alarm"
+
+        // Add emergency type if it was a real emergency
+        if (wasRealEmergency && emergencyType) {
+          emergencies[user.id].emergencyType = emergencyType
+        }
+
         localStorage.setItem("emergencies", JSON.stringify(emergencies))
 
         // Update emergency history
         const emergencyHistory = JSON.parse(localStorage.getItem("emergencyHistory") || "{}")
-        if (Array.isArray(emergencyHistory[user.id])) {
+        if (Array.isArray(emergencyHistory[user.id]) && emergencyHistory[user.id].length > 0) {
           // Find the most recent alert and update it
           const lastIndex = emergencyHistory[user.id].length - 1
           if (lastIndex >= 0) {
@@ -203,6 +322,10 @@ export default function AlarmPage() {
               ...emergencyHistory[user.id][lastIndex],
               active: false,
               cancelledAt: new Date().toISOString(),
+              liveStreamActive: false,
+              wasRealEmergency: wasRealEmergency,
+              cancellationReason: wasRealEmergency ? "Emergency resolved" : "False alarm",
+              emergencyType: wasRealEmergency ? emergencyType : undefined,
             }
           }
         } else if (emergencyHistory[user.id]) {
@@ -210,6 +333,10 @@ export default function AlarmPage() {
             ...emergencyHistory[user.id],
             active: false,
             cancelledAt: new Date().toISOString(),
+            liveStreamActive: false,
+            wasRealEmergency: wasRealEmergency,
+            cancellationReason: wasRealEmergency ? "Emergency resolved" : "False alarm",
+            emergencyType: wasRealEmergency ? emergencyType : undefined,
           }
         }
         localStorage.setItem("emergencyHistory", JSON.stringify(emergencyHistory))
@@ -246,8 +373,14 @@ export default function AlarmPage() {
         {alarmActive ? (
           <>
             <div className="text-center">
-              <div className="text-red-500 text-xl font-bold animate-pulse">ALERT ACTIVE</div>
-              <p className="text-gray-500 mt-2">Notifications sent to your trusted contacts</p>
+              <div className={`text-xl font-bold animate-pulse ${doubtMode ? "text-yellow-500" : "text-red-500"}`}>
+                {doubtMode ? "DOUBT MODE ACTIVE" : "ALERT ACTIVE"}
+              </div>
+              <p className="text-gray-500 mt-2">
+                {doubtMode
+                  ? "Situation logged, no emergency alert sent"
+                  : "Notifications sent to your trusted contacts"}
+              </p>
             </div>
 
             {!mapReady ? (
@@ -267,31 +400,41 @@ export default function AlarmPage() {
                     <p className="text-sm text-gray-500">
                       {recording ? `Recording: ${formatTime(elapsedTime)}` : "Not recording"}
                     </p>
+                    <div className="flex items-center">
+                      <p className="text-xs text-gray-400 mt-1 mr-2">{audioChunks.length} audio chunks recorded</p>
+                      {liveStreamActive && (
+                        <span className="bg-green-100 text-green-700 text-xs px-2 py-0.5 rounded-full animate-pulse">
+                          Live
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            <Card className="w-full bg-pink-50 border-pink-200">
-              <CardContent className="p-4">
-                <div className="flex items-center space-x-4">
-                  <div className="bg-pink-500 rounded-full p-3 animate-pulse">
-                    <Bell className="h-6 w-6 text-white" />
+            {!doubtMode && (
+              <Card className="w-full bg-pink-50 border-pink-200">
+                <CardContent className="p-4">
+                  <div className="flex items-center space-x-4">
+                    <div className="bg-pink-500 rounded-full p-3 animate-pulse">
+                      <Bell className="h-6 w-6 text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-medium">Alert Status</h3>
+                      <p className="text-sm text-gray-500">
+                        Alarm is playing on {trustedContacts.length} trusted contact device
+                        {trustedContacts.length !== 1 ? "s" : ""}
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-medium">Alert Status</h3>
-                    <p className="text-sm text-gray-500">
-                      Alarm is playing on {trustedContacts.length} trusted contact device
-                      {trustedContacts.length !== 1 ? "s" : ""}
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            )}
 
             <Button
-              onClick={cancelAlarm}
-              className="w-full h-16 bg-red-500 hover:bg-red-600 flex items-center justify-center space-x-3"
+              onClick={handleCancelClick}
+              className="w-full h-16 bg-green-500 hover:bg-green-600 flex items-center justify-center space-x-3"
             >
               <X className="h-6 w-6" />
               <span className="text-lg font-medium">Cancel Alert</span>
@@ -300,19 +443,35 @@ export default function AlarmPage() {
         ) : (
           <>
             <div className="text-center">
-              <h2 className="text-2xl font-bold text-pink-700">Emergency Button</h2>
-              <p className="text-gray-500 mt-2">Press the button below in case of emergency</p>
+              <h2 className="text-2xl font-bold text-pink-700">Emergency Options</h2>
+              <p className="text-gray-500 mt-2">Choose the appropriate action for your situation</p>
             </div>
 
-            <Button
-              onClick={triggerAlarm}
-              className="w-64 h-64 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center"
-            >
-              <AlertTriangle className="h-24 w-24" />
-            </Button>
+            <div className="space-y-6 w-full">
+              <Button
+                onClick={() => triggerAlarm(false)}
+                className="w-full h-20 bg-red-500 hover:bg-red-600 flex items-center justify-center space-x-3"
+              >
+                <AlertTriangle className="h-6 w-6" />
+                <span className="text-lg font-medium">Emergency Alert</span>
+              </Button>
 
-            <div className="text-center text-sm text-gray-500 max-w-xs">
-              This will send an alert to your trusted contacts and the nearest police station, along with your location
+              <Button
+                onClick={() => triggerAlarm(true)}
+                className="w-full h-16 bg-yellow-500 hover:bg-yellow-600 flex items-center justify-center space-x-3"
+              >
+                <AlertCircle className="h-6 w-6" />
+                <span className="text-lg font-medium">Doubt Mode</span>
+              </Button>
+
+              <div className="text-center text-sm text-gray-500 max-w-xs mx-auto">
+                <p className="mb-2">
+                  <strong>Emergency Alert:</strong> Sends immediate notification to all trusted contacts with alarm
+                </p>
+                <p>
+                  <strong>Doubt Mode:</strong> Records situation without sending alarm, but logs your location and audio
+                </p>
+              </div>
             </div>
 
             <Card className="w-full">
@@ -342,6 +501,70 @@ export default function AlarmPage() {
           </>
         )}
       </div>
+
+      {/* Cancel Alert Dialog */}
+      <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Cancel Alert</DialogTitle>
+            <DialogDescription>Please select the reason for cancelling this alert:</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-4 py-4">
+            <Button
+              onClick={handleFalseAlarm}
+              className="h-16 bg-green-500 hover:bg-green-600 flex items-center justify-center space-x-3"
+            >
+              <CheckCircle className="h-5 w-5 mr-2" />
+              <span>False Alarm - Nothing Happened</span>
+            </Button>
+
+            <Button
+              onClick={handleRealEmergency}
+              className="h-16 bg-red-500 hover:bg-red-600 flex items-center justify-center space-x-3"
+            >
+              <AlertCircle className="h-5 w-5 mr-2" />
+              <span>Emergency Resolved - Something Occurred</span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Emergency Type Dialog */}
+      <Dialog open={showEmergencyTypeDialog} onOpenChange={setShowEmergencyTypeDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Emergency Type</DialogTitle>
+            <DialogDescription>Please select the type of emergency that occurred:</DialogDescription>
+          </DialogHeader>
+          <div className="grid grid-cols-1 gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="emergency-type">Emergency Type</Label>
+              <Select value={emergencyType} onValueChange={setEmergencyType}>
+                <SelectTrigger id="emergency-type">
+                  <SelectValue placeholder="Select emergency type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="harassment">Harassment</SelectItem>
+                  <SelectItem value="stalking">Stalking</SelectItem>
+                  <SelectItem value="assault">Assault</SelectItem>
+                  <SelectItem value="robbery">Robbery</SelectItem>
+                  <SelectItem value="medical">Medical Emergency</SelectItem>
+                  <SelectItem value="accident">Accident</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button
+              onClick={handleEmergencyTypeSelect}
+              className="bg-pink-500 hover:bg-pink-600"
+              disabled={!emergencyType}
+            >
+              Confirm
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

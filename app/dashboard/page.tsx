@@ -30,7 +30,7 @@ export default function DashboardPage() {
       const allEmergencies = JSON.parse(localStorage.getItem("emergencies") || "{}")
       const allUsers = JSON.parse(localStorage.getItem("safetyUsers") || "[]")
 
-      // Filter emergencies for trusted contacts of the current user
+      // Get all active emergencies from users that the current user trusts
       const trustedContacts = userData.trustedContacts || []
       const activeEmergencies = []
 

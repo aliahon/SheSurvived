@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertTriangle, MapPin, X, Volume2, VolumeX } from "lucide-react"
+import { AlertTriangle, MapPin, X, Volume2, VolumeX, AlertCircle } from "lucide-react"
 import Link from "next/link"
+import AudioPlayer from "@/components/audio-player"
 
 interface EmergencyNotificationProps {
   emergency?: {
@@ -13,6 +14,13 @@ interface EmergencyNotificationProps {
     timestamp: string
     location: [number, number]
     playAlarmOnContact?: boolean
+    doubtMode?: boolean
+    audioChunks?: string[]
+    latestAudioChunk?: {
+      chunk: string
+      timestamp: string
+    }
+    liveStreamActive?: boolean
   }
   onDismiss?: () => void
 }
@@ -20,6 +28,7 @@ interface EmergencyNotificationProps {
 export default function EmergencyNotification({ emergency, onDismiss }: EmergencyNotificationProps) {
   const [timeAgo, setTimeAgo] = useState("")
   const [isMuted, setIsMuted] = useState(false)
+  const [showAudioPlayer, setShowAudioPlayer] = useState(false)
   const audioContextRef = useRef<AudioContext | null>(null)
   const oscillatorRef = useRef<OscillatorNode | null>(null)
   const gainNodeRef = useRef<GainNode | null>(null)
@@ -53,8 +62,8 @@ export default function EmergencyNotification({ emergency, onDismiss }: Emergenc
     updateTimeAgo()
     const interval = setInterval(updateTimeAgo, 60000)
 
-    // Play alarm sound if requested
-    if (emergency.playAlarmOnContact && !isMuted) {
+    // Play alarm sound if requested and not in doubt mode
+    if (emergency.playAlarmOnContact && !isMuted && !emergency.doubtMode) {
       try {
         const AudioContext = window.AudioContext || (window as any).webkitAudioContext
         if (AudioContext) {
@@ -124,7 +133,7 @@ export default function EmergencyNotification({ emergency, onDismiss }: Emergenc
   const toggleMute = () => {
     if (isMuted) {
       // Unmute - restart the alarm
-      if (emergency?.playAlarmOnContact) {
+      if (emergency?.playAlarmOnContact && !emergency.doubtMode) {
         try {
           const AudioContext = window.AudioContext || (window as any).webkitAudioContext
           if (AudioContext) {
@@ -164,19 +173,39 @@ export default function EmergencyNotification({ emergency, onDismiss }: Emergenc
     setIsMuted(!isMuted)
   }
 
+  const toggleAudioPlayer = () => {
+    setShowAudioPlayer(!showAudioPlayer)
+  }
+
   if (!emergency) return null
 
+  const isDoubtMode = emergency.doubtMode === true
+  const hasAudio = emergency.audioChunks && emergency.audioChunks.length > 0
+  const isLiveStreaming = emergency.liveStreamActive === true
+
   return (
-    <Card className="bg-red-50 border-red-200 mb-4 animate-pulse">
+    <Card
+      className={`mb-4 animate-pulse ${isDoubtMode ? "bg-yellow-50 border-yellow-200" : "bg-red-50 border-red-200"}`}
+    >
       <CardContent className="p-4">
         <div className="flex items-start justify-between">
           <div className="flex items-start space-x-3">
-            <div className="bg-red-500 rounded-full p-2 mt-1">
-              <AlertTriangle className="h-4 w-4 text-white" />
+            <div className={`rounded-full p-2 mt-1 ${isDoubtMode ? "bg-yellow-500" : "bg-red-500"}`}>
+              {isDoubtMode ? (
+                <AlertCircle className="h-4 w-4 text-white" />
+              ) : (
+                <AlertTriangle className="h-4 w-4 text-white" />
+              )}
             </div>
             <div>
-              <h3 className="font-bold text-red-700">EMERGENCY ALERT</h3>
-              <p className="text-sm text-gray-700">{emergency.userName} needs help!</p>
+              <h3 className={`font-bold ${isDoubtMode ? "text-yellow-700" : "text-red-700"}`}>
+                {isDoubtMode ? "DOUBT SITUATION" : "EMERGENCY ALERT"}
+              </h3>
+              <p className="text-sm text-gray-700">
+                {isDoubtMode
+                  ? `${emergency.userName} reported a suspicious situation`
+                  : `${emergency.userName} needs help!`}
+              </p>
               <p className="text-xs text-gray-500">{timeAgo}</p>
               <div className="flex items-center mt-1 text-xs text-gray-600">
                 <MapPin className="h-3 w-3 mr-1" />
@@ -184,10 +213,19 @@ export default function EmergencyNotification({ emergency, onDismiss }: Emergenc
                   {emergency.location[0].toFixed(6)}, {emergency.location[1].toFixed(6)}
                 </span>
               </div>
+              {hasAudio && isLiveStreaming && (
+                <button
+                  onClick={toggleAudioPlayer}
+                  className="mt-1 text-xs text-pink-600 hover:text-pink-800 flex items-center"
+                >
+                  {showAudioPlayer ? "Hide live audio" : "Listen to live audio"}
+                  {isLiveStreaming && <span className="ml-1 h-2 w-2 bg-pink-500 rounded-full animate-pulse"></span>}
+                </button>
+              )}
             </div>
           </div>
           <div className="flex items-center">
-            {emergency.playAlarmOnContact && (
+            {emergency.playAlarmOnContact && !isDoubtMode && (
               <Button
                 variant="ghost"
                 size="sm"
@@ -205,11 +243,35 @@ export default function EmergencyNotification({ emergency, onDismiss }: Emergenc
             )}
           </div>
         </div>
+
+        {showAudioPlayer && hasAudio && (
+          <div className="mt-3 p-3 bg-white rounded-md border border-gray-200">
+            <AudioPlayer
+              audioChunks={emergency.audioChunks || []}
+              isLive={isLiveStreaming}
+              latestTimestamp={emergency.latestAudioChunk?.timestamp}
+            />
+          </div>
+        )}
+
         <div className="mt-3 flex space-x-2">
           <Link href={`/emergency-track/${emergency.userId}`} className="flex-1">
-            <Button className="w-full bg-red-500 hover:bg-red-600 text-white">Track Location</Button>
+            <Button
+              className={`w-full text-white ${
+                isDoubtMode ? "bg-yellow-500 hover:bg-yellow-600" : "bg-red-500 hover:bg-red-600"
+              }`}
+            >
+              Track Location
+            </Button>
           </Link>
-          <Button variant="outline" className="border-red-200 text-red-700 hover:bg-red-50">
+          <Button
+            variant="outline"
+            className={
+              isDoubtMode
+                ? "border-yellow-200 text-yellow-700 hover:bg-yellow-50"
+                : "border-red-200 text-red-700 hover:bg-red-50"
+            }
+          >
             Call
           </Button>
         </div>

@@ -1,11 +1,22 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowLeft, Phone, MessageSquare, AlertTriangle, History } from "lucide-react"
+import {
+  ArrowLeft,
+  Phone,
+  MessageSquare,
+  AlertTriangle,
+  History,
+  Mic,
+  Radio,
+  AlertCircle,
+  CheckCircle,
+} from "lucide-react"
 import LiveLocationMap from "@/components/live-location-map"
+import AudioPlayer from "@/components/audio-player"
 import Link from "next/link"
 import { Skeleton } from "@/components/ui/skeleton"
 
@@ -19,6 +30,10 @@ export default function EmergencyTrackPage() {
   const [victimUser, setVictimUser] = useState<any>(null)
   const [location, setLocation] = useState<[number, number]>([30.4278, -9.5981])
   const [mapReady, setMapReady] = useState(false)
+  const [audioChunks, setAudioChunks] = useState<string[]>([])
+  const [liveStreamActive, setLiveStreamActive] = useState(false)
+  const [latestAudioChunk, setLatestAudioChunk] = useState<any>(null)
+  const liveStreamCheckIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     // Get current user
@@ -37,6 +52,17 @@ export default function EmergencyTrackPage() {
       if (emergencyData) {
         setEmergency(emergencyData)
         setLocation(emergencyData.location)
+        setLiveStreamActive(emergencyData.liveStreamActive || false)
+
+        // Get audio chunks if available
+        if (emergencyData.audioChunks && Array.isArray(emergencyData.audioChunks)) {
+          setAudioChunks(emergencyData.audioChunks)
+        }
+
+        // Get latest audio chunk for live streaming
+        if (emergencyData.latestAudioChunk) {
+          setLatestAudioChunk(emergencyData.latestAudioChunk)
+        }
 
         // Get victim user data
         const allUsers = JSON.parse(localStorage.getItem("safetyUsers") || "[]")
@@ -48,12 +74,27 @@ export default function EmergencyTrackPage() {
         // Check emergency history
         const emergencyHistory = JSON.parse(localStorage.getItem("emergencyHistory") || "{}")
         if (emergencyHistory[userId]) {
-          const historyData = Array.isArray(emergencyHistory[userId])
-            ? emergencyHistory[userId][emergencyHistory[userId].length - 1]
-            : emergencyHistory[userId]
+          // Get all alerts for this user
+          const userAlerts = Array.isArray(emergencyHistory[userId])
+            ? emergencyHistory[userId]
+            : [emergencyHistory[userId]]
 
-          setEmergency(historyData)
-          setLocation(historyData.location)
+          // Get the most recent alert
+          const mostRecentAlert = userAlerts[userAlerts.length - 1]
+
+          setEmergency(mostRecentAlert)
+          setLocation(mostRecentAlert.location)
+          setLiveStreamActive(mostRecentAlert.liveStreamActive || false)
+
+          // Get audio chunks if available
+          if (mostRecentAlert.audioChunks && Array.isArray(mostRecentAlert.audioChunks)) {
+            setAudioChunks(mostRecentAlert.audioChunks)
+          }
+
+          // Get latest audio chunk for live streaming
+          if (mostRecentAlert.latestAudioChunk) {
+            setLatestAudioChunk(mostRecentAlert.latestAudioChunk)
+          }
 
           // Get victim user data
           const allUsers = JSON.parse(localStorage.getItem("safetyUsers") || "[]")
@@ -92,6 +133,23 @@ export default function EmergencyTrackPage() {
 
     window.addEventListener("storage", handleStorageChange)
 
+    // Set up interval to check for live audio updates
+    liveStreamCheckIntervalRef.current = setInterval(() => {
+      if (liveStreamActive) {
+        const allEmergencies = JSON.parse(localStorage.getItem("emergencies") || "{}")
+        const emergencyData = allEmergencies[userId]
+
+        if (emergencyData && emergencyData.latestAudioChunk) {
+          setLatestAudioChunk(emergencyData.latestAudioChunk)
+
+          // Update audio chunks if needed
+          if (emergencyData.audioChunks && Array.isArray(emergencyData.audioChunks)) {
+            setAudioChunks(emergencyData.audioChunks)
+          }
+        }
+      }
+    }, 2000)
+
     // Set map ready after a delay to ensure DOM is ready
     const mapReadyTimeout = setTimeout(() => {
       setMapReady(true)
@@ -100,11 +158,26 @@ export default function EmergencyTrackPage() {
     return () => {
       clearInterval(locationInterval)
       clearTimeout(mapReadyTimeout)
+      if (liveStreamCheckIntervalRef.current) {
+        clearInterval(liveStreamCheckIntervalRef.current)
+      }
       window.removeEventListener("storage", handleStorageChange)
     }
   }, [router, userId])
 
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString)
+    return date.toLocaleString()
+  }
+
+  const handleSeek = (chunkIndex: number) => {
+    console.log(`Seeking to chunk ${chunkIndex}`)
+    // In a real app, this would seek to the specific audio chunk
+  }
+
   if (!user || !emergency || !victimUser) return null
+
+  const isDoubtMode = emergency.doubtMode === true
 
   return (
     <div className="container max-w-md mx-auto px-4 py-4 min-h-screen flex flex-col">
@@ -119,31 +192,74 @@ export default function EmergencyTrackPage() {
           </div>
         </div>
         <div
-          className={`px-2 py-1 rounded-full text-xs font-medium ${emergency.active ? "bg-red-100 text-red-500 animate-pulse" : "bg-gray-100 text-gray-500"}`}
+          className={`px-2 py-1 rounded-full text-xs font-medium ${
+            emergency.active
+              ? isDoubtMode
+                ? "bg-yellow-100 text-yellow-500 animate-pulse"
+                : "bg-red-100 text-red-500 animate-pulse"
+              : "bg-gray-100 text-gray-500"
+          }`}
         >
-          {emergency.active ? "LIVE" : "INACTIVE"}
+          {emergency.active ? (isDoubtMode ? "DOUBT" : "LIVE") : "INACTIVE"}
         </div>
       </header>
 
       <div className="flex-1 space-y-4">
-        <Card className={emergency.active ? "bg-red-50 border-red-200" : "bg-gray-50 border-gray-200"}>
+        <Card
+          className={
+            emergency.active
+              ? isDoubtMode
+                ? "bg-yellow-50 border-yellow-200"
+                : "bg-red-50 border-red-200"
+              : "bg-gray-50 border-gray-200"
+          }
+        >
           <CardContent className="p-4">
             <div className="flex items-start space-x-3">
-              <div className={`rounded-full p-2 mt-1 ${emergency.active ? "bg-red-500" : "bg-gray-500"}`}>
-                <AlertTriangle className="h-4 w-4 text-white" />
+              <div
+                className={`rounded-full p-2 mt-1 ${
+                  emergency.active ? (isDoubtMode ? "bg-yellow-500" : "bg-red-500") : "bg-gray-500"
+                }`}
+              >
+                {isDoubtMode ? (
+                  <AlertCircle className="h-4 w-4 text-white" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 text-white" />
+                )}
               </div>
               <div>
-                <h3 className={`font-bold ${emergency.active ? "text-red-700" : "text-gray-700"}`}>
-                  {emergency.active ? "EMERGENCY ALERT" : "PAST EMERGENCY"}
+                <h3
+                  className={`font-bold ${
+                    emergency.active ? (isDoubtMode ? "text-yellow-700" : "text-red-700") : "text-gray-700"
+                  }`}
+                >
+                  {emergency.active ? (isDoubtMode ? "DOUBT SITUATION" : "EMERGENCY ALERT") : "PAST EMERGENCY"}
                 </h3>
                 <p className="text-sm text-gray-700">
-                  {victimUser.fullName} {emergency.active ? "needs help!" : "needed help"}
+                  {isDoubtMode
+                    ? `${victimUser.fullName} reported a suspicious situation`
+                    : `${victimUser.fullName} ${emergency.active ? "needs help!" : "needed help"}`}
                 </p>
-                <p className="text-xs text-gray-500">{new Date(emergency.timestamp).toLocaleString()}</p>
+                <p className="text-xs text-gray-500">{formatDate(emergency.timestamp)}</p>
                 {emergency.cancelledAt && (
-                  <p className="text-xs text-yellow-600 mt-1">
-                    Cancelled at {new Date(emergency.cancelledAt).toLocaleString()}
-                  </p>
+                  <div className="mt-1">
+                    <p className="text-xs text-yellow-600">Cancelled at {formatDate(emergency.cancelledAt)}</p>
+                    {emergency.cancellationReason && (
+                      <div className="flex items-center mt-1">
+                        {emergency.wasRealEmergency ? (
+                          <AlertCircle className="h-3 w-3 text-red-500 mr-1" />
+                        ) : (
+                          <CheckCircle className="h-3 w-3 text-green-500 mr-1" />
+                        )}
+                        <p className="text-xs font-medium">{emergency.cancellationReason}</p>
+                      </div>
+                    )}
+                    {emergency.emergencyType && (
+                      <div className="mt-1 bg-pink-100 text-pink-700 text-xs px-2 py-0.5 rounded-full inline-block">
+                        {emergency.emergencyType}
+                      </div>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -161,6 +277,32 @@ export default function EmergencyTrackPage() {
             {emergency.active ? "Location is being updated in real-time" : "This was the last recorded location"}
           </p>
         </div>
+
+        {audioChunks.length > 0 && (
+          <Card className="overflow-hidden">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center space-x-3">
+                  <Mic className="h-5 w-5 text-pink-500" />
+                  <h3 className="font-medium">Audio Recording</h3>
+                </div>
+                {liveStreamActive && (
+                  <div className="flex items-center space-x-1">
+                    <Radio className="h-3 w-3 text-green-500 animate-pulse" />
+                    <span className="text-xs text-green-600 font-medium">Live</span>
+                  </div>
+                )}
+              </div>
+
+              <AudioPlayer
+                audioChunks={audioChunks}
+                isLive={liveStreamActive}
+                latestTimestamp={latestAudioChunk?.timestamp}
+                onSeek={handleSeek}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         {emergency.active && (
           <div className="grid grid-cols-2 gap-4">
