@@ -17,34 +17,36 @@ This document provides a detailed explanation of the SheSurvived app's code stru
 ## Project Structure
 
 The SheSurvived app is built using Next.js with the App Router and follows a component-based architecture. Here's an overview of the project structure:
-
-\`\`\`
-/app                     # Next.js App Router directory
-  /alarm                 # Emergency alarm page
-  /bracelet-selection    # Bracelet selection page
-  /bracelet-verification # Bracelet verification page
-  /dashboard             # Main dashboard page
-  /emergency-history     # Emergency history page
-  /emergency-track       # Emergency tracking page
-  /login                 # Login page
-  /profile               # User profile page
-  /register              # Registration page
-  /safe-walk             # Safety map page
-  /trusted-by            # People trusting you page
-  /trusted-contacts      # Trusted contacts page
-  /layout.tsx            # Root layout
-  /globals.css           # Global styles
-/components              # Reusable components
-  /audio-player          # Audio player component with full controls
-  /emergency-notification # Emergency notification component
-  /heat-map              # Heat map component
-  /live-location-map     # Live location map component
-  /she-survived-logo     # Logo component
-  /ui                    # UI components (shadcn/ui)
-/public                  # Static assets
-  /images                # Images
-  /alarm-sound.mp3       # Alarm sound
-\`\`\`
+```
+├── app/                           # Next.js App Router directory
+│   ├── alarm/                     # Emergency alarm page
+│   ├── bracelet-selection/        # Bracelet selection page
+│   ├── bracelet-verification/     # Bracelet verification page
+│   ├── dashboard/                 # Main dashboard page
+│   ├── emergency-history/         # Emergency history page
+│   ├── emergency-track/           # Emergency tracking page
+│   ├── login/                     # Login page
+│   ├── profile/                   # User profile page
+│   ├── register/                  # Registration page
+│   ├── safe-walk/                 # Safety map page
+│   ├── trusted-by/                # People trusting you page
+│   ├── trusted-contacts/          # Trusted contacts page
+│   ├── layout.tsx                 # Root layout
+│   └── globals.css                # Global styles
+│
+├── components/                    # Reusable components
+│   ├── audio-player/              # Audio player component with full controls
+│   ├── emergency-notification/    # Emergency notification component
+│   ├── heat-map/                  # Heat map component
+│   ├── live-location-map/         # Live location map component
+│   └── she-survived-logo/         # Logo component
+│
+├── ui/                            # UI components (shadcn/ui)
+│
+├── public/                        # Static assets
+│   ├── images/                    # Images
+│   └── alarm-sound.mp3            # Alarm sound
+```
 
 ## Core Components
 
@@ -57,13 +59,13 @@ The `LiveLocationMap` component is responsible for displaying and updating the u
 - Map controls
 - Location sharing
 
-\`\`\`tsx
+```tsx
 // Key features of LiveLocationMap
 - Initializes a Leaflet map with the user's location
 - Updates the marker position when location changes
 - Stores location data in localStorage for emergency sharing
 - Provides controls for starting/stopping tracking
-\`\`\`
+```
 
 ### EmergencyNotification
 
@@ -75,7 +77,7 @@ The `EmergencyNotification` component displays alerts when a trusted contact tri
 - Quick actions for responding to the emergency
 - Embedded audio player for live streaming audio from the emergency
 
-\`\`\`tsx
+```tsx
 // Key features of EmergencyNotification
 - Displays emergency information (user, time, location)
 - Plays an alarm sound using Web Audio API
@@ -83,7 +85,7 @@ The `EmergencyNotification` component displays alerts when a trusted contact tri
 - Shows different styles based on emergency type
 - Includes an embedded AudioPlayer for live audio streaming
 - Toggle option to show/hide the audio player
-\`\`\`
+```
 
 ### AudioPlayer
 
@@ -96,14 +98,14 @@ The `AudioPlayer` component provides full control over audio playback:
 - Volume control and mute option
 - Time display showing current position and total duration
 
-\`\`\`tsx
+```tsx
 // Key features of AudioPlayer
 - Simulates audio playback with Web Audio API
 - Provides a timeline slider for seeking
 - Shows current time and total duration
 - Supports live streaming with visual indicators
 - Includes controls for play/pause, skip, and volume
-\`\`\`
+```
 
 ### HeatMap
 
@@ -120,7 +122,7 @@ The app uses localStorage for data persistence in this demo version. The main da
 
 ### User Data
 
-\`\`\`typescript
+```typescript
 interface User {
   id: string;
   fullName: string;
@@ -135,11 +137,11 @@ interface User {
   trustedContacts: string[]; // Array of user IDs
   trustedBy: string[]; // Array of user IDs who trust this user
 }
-\`\`\`
+```
 
 ### Emergency Data
 
-\`\`\`typescript
+```typescript
 interface Emergency {
   userId: string;
   userName: string;
@@ -160,7 +162,7 @@ interface Emergency {
   cancellationReason?: string;
   emergencyType?: string; // Type of emergency (harassment, stalking, etc.)
 }
-\`\`\`
+```
 
 ## Key Features Implementation
 
@@ -173,7 +175,7 @@ The authentication flow is simulated using localStorage:
 3. If they have a bracelet, they verify it with a code
 4. User is redirected to the dashboard
 
-\`\`\`tsx
+```tsx
 // Registration process
 const handleSubmit = (e: React.FormEvent) => {
   e.preventDefault();
@@ -194,7 +196,7 @@ const handleSubmit = (e: React.FormEvent) => {
   // Redirect to bracelet selection
   router.push("/bracelet-selection");
 };
-\`\`\`
+```
 
 ### Emergency Alert System
 
@@ -206,7 +208,7 @@ The emergency alert system is the core functionality of the app:
 4. User can cancel the alert with a reason
 5. If it was a real emergency, user selects the emergency type
 
-\`\`\`tsx
+```tsx
 // Triggering an emergency alert
 const triggerAlarm = (isDoubtMode = false) => {
   setAlarmActive(true);
@@ -233,13 +235,13 @@ const triggerAlarm = (isDoubtMode = false) => {
   // Store in localStorage and notify trusted contacts
   // ...
 };
-\`\`\`
+```
 
 ### Audio Recording and Streaming
 
 The app simulates audio recording and live streaming from the emergency sender to trusted contacts:
 
-\`\`\`tsx
+```tsx
 // In alarm page - Recording and streaming audio
 useEffect(() => {
   if (recording && liveStreamActive) {
@@ -274,13 +276,13 @@ useEffect(() => {
     return () => clearInterval(recordingInterval);
   }
 }, [recording, user]);
-\`\`\`
+```
 
 ### Audio Player Implementation
 
 The AudioPlayer component provides full control over audio playback:
 
-\`\`\`tsx
+```tsx
 // AudioPlayer component key functionality
 const startPlayback = () => {
   if (audioChunks.length === 0) return;
@@ -332,13 +334,13 @@ const startPlayback = () => {
     console.error("Error starting audio playback:", error);
   }
 };
-\`\`\`
+```
 
 ### Location Tracking
 
 Location tracking is simulated using the `LiveLocationMap` component:
 
-\`\`\`tsx
+```tsx
 // Simulating location updates
 const simulateLocationUpdate = () => {
   setLocation((prevLocation) => {
@@ -363,7 +365,7 @@ useEffect(() => {
     }
   };
 }, [isTracking, mapInitialized]);
-\`\`\`
+```
 
 ## Trusted Contacts System
 
@@ -375,7 +377,7 @@ The trusted contacts system allows users to:
 4. Track trusted contacts during emergencies
 5. Listen to live audio streaming from trusted contacts during emergencies
 
-\`\`\`tsx
+```tsx
 // Adding a trusted contact
 const addContact = (contactId: string) => {
   if (!user) return;
@@ -411,13 +413,13 @@ const addContact = (contactId: string) => {
   setSearchResults(searchResults.filter((r) => r.id !== contactId));
   setAllUsers(updatedUsers);
 };
-\`\`\`
+```
 
 ## Emergency History
 
 The emergency history system stores and displays all past emergency alerts:
 
-\`\`\`tsx
+```tsx
 // Loading emergency history
 const loadEmergencyHistory = (userData: any, users: any[]) => {
   // Get emergency history from localStorage
@@ -451,13 +453,13 @@ const loadEmergencyHistory = (userData: any, users: any[]) => {
   // Process received alerts (alerts sent by trusted contacts)
   // ...
 };
-\`\`\`
+```
 
 ## Emergency Notification with Live Audio
 
 The EmergencyNotification component now includes an embedded AudioPlayer for live audio streaming:
 
-\`\`\`tsx
+```tsx
 // EmergencyNotification with AudioPlayer
 return (
   <Card className={`mb-4 animate-pulse ${isDoubtMode ? "bg-yellow-50" : "bg-red-50"}`}>
@@ -501,7 +503,7 @@ return (
     </CardContent>
   </Card>
 );
-\`\`\`
+```
 
 ## Conclusion
 
