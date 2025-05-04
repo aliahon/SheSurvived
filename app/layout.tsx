@@ -8,8 +8,7 @@ const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "SheSurvived - Women's Safety App",
-  description: "A safety application for women with smart bracelet integration",
-    generator: 'v0.dev'
+  description: "A safety application for women with smart bracelet integration"
 }
 
 export default function RootLayout({
